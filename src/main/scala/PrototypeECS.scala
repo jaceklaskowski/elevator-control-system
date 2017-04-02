@@ -3,9 +3,11 @@ case class PrototypeECS(elevatorsNum: Int = 3) extends ElevatorControlSystem {
   require(elevatorsNum >= 0 && elevatorsNum <= 16,
     "Elevator control system supports up to 16 elevators")
 
-  var elevators = (0 until elevatorsNum).map(n => Elevator(n))
+  val elevators = (0 until elevatorsNum).map(n => Elevator(n))
 
-  override def status(): Seq[(Int, Int, Int)] = elevators.map(_.toStatus)
+  override def status(): Seq[(Int, Int, Seq[Int])] = {
+    elevators.map(_.toStatus)
+  }
 
   override def update(elevatorId: Int, floor: Int, goalFloor: Int): Unit = synchronized {
     elevators.find(e => e.id == elevatorId).headOption.foreach { e =>

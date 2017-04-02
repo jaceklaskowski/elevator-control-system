@@ -9,22 +9,30 @@ object Direction {
 }
 
 case class Elevator(id: Int) {
-  var _state = ElevatorState(floor = 0, goalFloor = 0)
+  def canAcceptPickup(floor: Int, direction: Int): Boolean = true
+
+  var _state = ElevatorState()
 
   def update(floor: Int, goalFloor: Int) = {
-    _state = ElevatorState(floor, goalFloor)
+    _state = ElevatorState(floor, Seq(goalFloor))
   }
 
   def move(floor: Int, direction: Int): Unit = synchronized {
-    _state = _state.copy(goalFloor = floor)
+    _state = _state.copy(goalFloors = _state.goalFloors :+ floor)
   }
 
   def step(): Unit = {
-    if (state.isGoingUp) {
-      _state = _state.copy(floor = _state.floor + 1)
+    val step = if (state.isGoingUp) {
+      1
     } else if (state.isGoingDown) {
-      _state = _state.copy(floor = _state.floor - 1)
-    } else {} // do nothing => I stand still
+      -1
+    } else {
+      0 // do nothing => stand still
+    }
+    _state = _state.copy(floor = _state.floor + step)
+
+    // unload/load the people
+    _state = _state.copy(goalFloors = _state.goalFloors.filterNot(floor => floor == _state.floor))
   }
 
   // the closer to 0, the better
@@ -33,30 +41,35 @@ case class Elevator(id: Int) {
     val cost = if (state.standingStill) {
       math.abs(state.floor - floor)
     }
-    else if (state.isGoingUp && state.goalFloor == floor) 0
-    else if (state.isGoingUp) {
-      math.abs(floor - state.goalFloor)
-    } else if (state.isGoingDown && state.goalFloor < floor) {
-      state.floor - state.goalFloor + (floor - state.goalFloor)
+    else if (state.goalFloors.contains(floor)) {
+      math.abs(state.floor - floor)
+    }
+    else if (state.isGoingUp && state.floor <= floor) {
+      // we're going up to the requested floor
+      math.abs(state.floor - floor)
+    }
+    else if (state.isGoingDown && floor <= state.floor) {
+      math.abs(state.floor - floor)
     } else {
-      0
+      // FIXME Max #Floors < 1000 / 2
+      1000 * math.signum(state.floor - floor)
     }
     cost
   }
 
   def state: ElevatorState = _state
-  def toStatus: (Int, Int, Int) = (id, state.floor, state.goalFloor)
+  def toStatus: (Int, Int, Seq[Int]) = (id, state.floor, state.goalFloors)
 }
 
-case class ElevatorState(floor: Int, goalFloor: Int) {
-  def isGoingUp: Boolean = floor < goalFloor
-  def isGoingDown: Boolean = floor > goalFloor
-  def standingStill: Boolean = floor == goalFloor
+case class ElevatorState(floor: Int = 0, goalFloors: Seq[Int] = Seq.empty) {
+  def isGoingUp: Boolean = !standingStill && floor < goalFloors.min
+  def isGoingDown: Boolean = !standingStill && floor > goalFloors.min
+  def standingStill: Boolean = goalFloors.isEmpty
   def isMoving: Boolean = !standingStill
 }
 
 trait ElevatorControlSystem {
-  def status(): Seq[(Int, Int, Int)]
+  def status(): Seq[(Int, Int, Seq[Int])]
   def update(elevatorId: Int, floor: Int, goalFloor: Int)
   def pickup(floor: Int, direction: Int)
   def step()
